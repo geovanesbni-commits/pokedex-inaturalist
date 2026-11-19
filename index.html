@@ -86,6 +86,8 @@
   .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); }
   .card { --fa: #bbb; --fb: #888; padding: 7px; border-radius: 16px; display: flex; flex-direction: column;
           background: linear-gradient(140deg, var(--fa), var(--fb)); box-shadow: 0 2px 6px rgba(0,0,0,.28); transition: transform .15s; }
+  /* A carta tem as mesmas cores nos temas claro e escuro (papel creme), então redefine os tokens que usa */
+  .card { --paper: #fbf6e3; --ink: #2b2a22; --muted: #6a776c; --accent: #2f7d3b; --other: #2b6cb0; }
   .card:hover { transform: translateY(-3px) rotate(-.4deg); }
   .card[data-r="C"] { --fa: #8fd194; --fb: #2f7d3b; }
   .card[data-r="I"] { --fa: #8fbdea; --fb: #2b6cb0; }
