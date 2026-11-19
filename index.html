@@ -1,0 +1,958 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pokédex iNaturalist</title>
+<style>
+  :root {
+    --bg: #f5f6f2; --card: #ffffff; --text: #1d2a1f; --muted: #6a776c;
+    --line: #dfe3da; --accent: #2f7d3b; --accent-soft: #e3f1e5; --warn: #b4540a;
+    --other: #2b6cb0; --other-soft: #e2edf8; --shadow: 0 1px 3px rgba(0,0,0,.08);
+    --paper: #fbf6e3; --ink: #2b2a22;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141a15; --card: #1e2620; --text: #e6ece6; --muted: #92a095;
+      --line: #2d382f; --accent: #5fbf6d; --accent-soft: #223a27; --warn: #f0a35a;
+      --other: #6aaaf0; --other-soft: #1f3046; --shadow: none;
+      --paper: #262c24; --ink: #ece7d4;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .topbar h1 { margin: 0; flex: 1; }
+  .where { color: var(--muted); font-size: .85rem; text-align: right; max-width: 40%; }
+  .filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 8px; }
+  .filterbar .seg { margin-bottom: 0; }
+  .rarslot { margin-left: auto; display: flex; justify-content: flex-end; }   /* reserva o espaço quando o filtro flutua */
+  .rarwrap.floating { position: fixed; top: 10px; z-index: 15; padding: 6px 12px; border-radius: 999px; background: var(--card);
+                      border: 1px solid var(--line); box-shadow: 0 4px 14px rgba(0,0,0,.22); animation: rar-pop .18s ease-out; }
+  @keyframes rar-pop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 20; opacity: 0; visibility: hidden; transition: opacity .2s, visibility .2s; }
+  .scrim.open { opacity: 1; visibility: visible; }
+  .drawer { position: fixed; top: 0; left: 0; bottom: 0; width: min(440px, 92vw); z-index: 21; overflow-y: auto; padding: 16px;
+            background: var(--bg); box-shadow: 4px 0 24px rgba(0,0,0,.3); transform: translateX(-104%); visibility: hidden;
+            transition: transform .22s, visibility .22s; }
+  .drawer.open { transform: none; visibility: visible; }
+  .dhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 1.1rem; }
+  .drawer .row { grid-template-columns: 1fr; }
+  .sub { color: var(--muted); margin: 0 0 16px; font-size: .95rem; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+           padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow); }
+  label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
+  input, select, button { font: inherit; color: inherit; }
+  input[type=text], select { width: 100%; padding: 9px 10px; border: 1px solid var(--line);
+         border-radius: 8px; background: var(--bg); }
+  input:disabled { opacity: .5; }
+  button { padding: 9px 14px; border-radius: 8px; border: 1px solid var(--accent);
+           background: var(--accent); color: #fff; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: grid; gap: 12px; align-items: start; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .row label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .field { position: relative; }
+  .suggest { position: absolute; z-index: 5; left: 0; right: 0; top: 100%; margin: 4px 0 0; padding: 4px;
+             list-style: none; background: var(--card); border: 1px solid var(--line);
+             border-radius: 8px; max-height: 280px; overflow: auto; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+  .suggest li { padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+  .suggest li:hover { background: var(--accent-soft); }
+  .suggest small { color: var(--muted); white-space: nowrap; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--accent-soft);
+          border-radius: 999px; padding: 4px 10px; font-size: .9rem; margin-top: 8px; }
+  .chip button { padding: 0 4px; background: none; border: none; color: var(--muted); }
+  .users { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+  details summary { cursor: pointer; font-weight: 600; }
+  .radio { display: flex; gap: 6px; align-items: center; margin-top: 6px; font-size: .9rem; color: var(--muted); }
+
+  .stat { margin-bottom: 10px; }
+  .stat:last-child { margin-bottom: 0; }
+  .stat b.o { color: var(--other); } .stat b.m { color: var(--accent); }
+  .progress { height: 10px; background: var(--line); border-radius: 999px; overflow: hidden; margin-top: 4px; }
+  .progress > div { height: 100%; width: 0; transition: width .4s; }
+  .progress .m { background: var(--accent); } .progress .o { background: var(--other); }
+
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .seg button { background: transparent; color: var(--text); border: 1px solid var(--line); padding: 6px 12px; font-size: .9rem; }
+  .seg button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #status { color: var(--muted); font-size: .9rem; min-height: 1.4em; margin: 4px 0 10px; }
+  #status.error { color: var(--warn); }
+
+  /* ---- Carta estilo Pokémon: moldura colorida pela raridade, miolo creme, "PS" = observações, "ataques" = treinadores ---- */
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); }
+  .card { --fa: #bbb; --fb: #888; padding: 7px; border-radius: 16px; display: flex; flex-direction: column;
+          background: linear-gradient(140deg, var(--fa), var(--fb)); box-shadow: 0 2px 6px rgba(0,0,0,.28); transition: transform .15s; }
+  .card:hover { transform: translateY(-3px) rotate(-.4deg); }
+  .card[data-r="C"] { --fa: #8fd194; --fb: #2f7d3b; }
+  .card[data-r="I"] { --fa: #8fbdea; --fb: #2b6cb0; }
+  .card[data-r="R"] { --fa: #f6dc7d; --fb: #b8860b; }
+  .card[data-r="L"] { --fa: #ff9a9a; --fb: #9b1c1c; }
+  .card.miss { --fa: #d5d9d2; --fb: #9aa397; }
+  .cin { flex: 1; display: flex; flex-direction: column; background: var(--paper); color: var(--ink); border-radius: 10px; padding: 8px 9px 9px; }
+  .chead { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; margin-bottom: 6px; min-height: 2.3em; }
+  .hp { color: color-mix(in srgb, var(--fb) 75%, #fff); font-weight: 800; font-size: .95rem; white-space: nowrap; }   /* cor da moldura, mais clara */
+  .hp small { font-size: .6rem; font-weight: 700; }
+  .banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 5px; margin-top: 7px;
+            font-size: .72rem; color: var(--muted); text-align: center; }
+  .banner .sci { font-style: italic; min-width: 0; }
+  .banner .rar, .banner .cons { position: static; flex: none; }
+  .banner .rar { width: 17px; height: 17px; font-size: .62rem; }
+  .banner .cons { font-size: .58rem; padding: 0 6px; line-height: 17px; }
+  .art { position: relative; height: 140px; display: flex; align-items: center; justify-content: center; overflow: hidden;
+         border: 3px solid #cdb865; border-radius: 4px; box-shadow: 0 0 0 1px rgba(0,0,0,.3), inset 0 0 10px rgba(0,0,0,.25);
+         background: radial-gradient(circle at 50% 35%, rgba(255,255,255,.65), transparent 62%), linear-gradient(160deg, var(--fa), var(--fb)); }
+  .art::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+  .card.have .art::after { background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.28) 46%, transparent 62%); }
+  /* Foil: Lendária que já tem foto. Faixa holográfica varrendo a foto + brilho percorrendo a moldura. */
+  .card.foil { background: linear-gradient(120deg, #ff9a9a, #9b1c1c 25%, #ffe08a 45%, #ff7aa8 55%, #9b1c1c 75%, #ff9a9a);
+               background-size: 300% 300%; animation: foil-frame 6s linear infinite; }
+  .card[data-r="R"].foil { background-image: linear-gradient(120deg, #f6dc7d, #b8860b 25%, #fff3b0 45%, #e8b923 55%, #b8860b 75%, #f6dc7d); }   /* moldura foil dourada para Raro */
+  .card.foil .art::after { mix-blend-mode: color-dodge; background-size: 260% 100%; background-position: 130% 0;
+    background-image: linear-gradient(115deg, transparent 22%, rgba(255,60,150,.55) 32%, rgba(255,214,0,.6) 40%, rgba(0,229,255,.6) 48%, rgba(150,90,255,.55) 56%, transparent 66%);
+    animation: foil-sweep 3.4s ease-in-out infinite; }
+  @keyframes foil-sweep { 0% { background-position: 130% 0; } 55%, 100% { background-position: -40% 0; } }
+  @keyframes foil-frame { 0% { background-position: 0% 50%; } 100% { background-position: 300% 50%; } }
+  @media (prefers-reduced-motion: reduce) {
+    .card.foil, .card.foil .art::after { animation: none; }
+    .card.foil .art::after { background-position: 40% 0; opacity: .5; }
+  }
+  .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .art .emoji { font-size: 3.4rem; filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
+  .card.miss .art .emoji { filter: grayscale(1) brightness(.55); opacity: .55; }
+  .card.miss .art img { filter: grayscale(.85); opacity: .78; }
+  .rar { position: absolute; top: 6px; left: 6px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+         font-size: .75rem; color: #fff; font-weight: 700; cursor: help; }
+  .r-common { background: #2f7d3b; } .r-uncommon { background: #2b6cb0; } .r-rare { background: #c99a06; } .r-legend { background: #c53030; }
+  .cons { position: absolute; bottom: 4px; left: 6px; font-size: .65rem; padding: 1px 6px; border-radius: 999px;
+          color: #fff; background: #8a6d1d; cursor: help; }
+  .cons.hot { background: #c53030; }
+  .rarwrap { margin-left: auto; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .85rem; }
+  .rarbtns { display: flex; gap: 8px; }
+  .rbtn { width: 34px; height: 34px; padding: 0; border-radius: 50%; font-weight: 700; font-size: 1rem;
+          background: transparent; color: var(--c); border: 2px solid var(--c); }
+  .rbtn.on { background: var(--c); color: #fff; }
+  .rbtn:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  a.pill { text-decoration: none; cursor: pointer; }
+  a.pill:hover .pn { text-decoration: underline; }
+  a.season-btn { text-decoration: none; }
+  .who { position: absolute; bottom: 4px; right: 6px; font-size: .65rem; color: #fff; background: rgba(0,0,0,.55);
+         padding: 1px 6px; border-radius: 999px; }
+  .info { display: flex; flex-direction: column; flex: 1; }
+  .name { font-weight: 800; font-size: 1rem; line-height: 1.15; color: var(--ink); text-decoration: none; }
+  .name:hover { text-decoration: underline; }
+  .pills { display: flex; flex-direction: column; margin-top: 8px; border-top: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); }
+  .pill { display: flex; align-items: center; gap: 8px; padding: 5px 2px; font-size: .82rem; color: var(--muted);
+          border-bottom: 1px dashed color-mix(in srgb, var(--ink) 22%, transparent); }
+  .pill .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--muted); opacity: .4; }
+  .pill .pn { flex: 1; font-weight: 600; }
+  .pill.on { color: var(--ink); }
+  .pill.m.on .dot { background: var(--accent); opacity: 1; } .pill.m.on .pm { color: var(--accent); }
+  .pill.o.on .dot { background: var(--other); opacity: 1; } .pill.o.on .pm { color: var(--other); }
+  .foot { margin-top: auto; padding-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .season-btn { width: 34px; height: 34px; padding: 0; border-radius: 50%; font-size: 1rem; line-height: 1;
+                display: inline-grid; place-items: center; background: transparent; color: var(--muted);
+                border: 1px solid color-mix(in srgb, var(--ink) 28%, transparent); }
+  .season-btn:hover { border-color: var(--accent); }
+  button.round { width: 42px; height: 42px; padding: 0; border-radius: 50%; font-size: 1.15rem; line-height: 1;
+                 display: inline-grid; place-items: center; border: 1px solid var(--line); }
+  button.round:hover { border-color: var(--accent); }
+  .btns { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-left: auto; }
+  .btns .season-btn { margin-top: 0; }
+  .names { font-size: .8rem; color: var(--muted); margin-top: 6px; }
+  .season { display: flex; align-items: flex-end; gap: 2px; height: 46px; margin-top: 6px; }
+  .season .b { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .season .b i { display: block; width: 100%; background: color-mix(in srgb, var(--ink) 20%, transparent); border-radius: 2px 2px 0 0; min-height: 2px; }
+  .season .b.hl i { background: var(--accent); }
+  .season .b span { font-size: .6rem; color: var(--muted); margin-top: 1px; }
+  .more { text-align: center; margin: 16px 0; }
+  footer { color: var(--muted); font-size: .8rem; text-align: center; padding: 8px 0 24px; }
+  @media (max-width: 520px) { .users { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <button id="menuBtn" class="ghost round" aria-label="Abrir menu" aria-expanded="false" aria-controls="menu" title="Menu: usuários, busca e progresso">☰</button>
+    <h1>🌿 Pokédex iNaturalist</h1>
+    <span class="where" id="where"></span>
+  </div>
+  <p class="sub">Os animais de uma região: o que já capturamos (com foto) e o que ainda falta. Só observações <b>Research Grade</b>.</p>
+
+  <div class="scrim" id="scrim"></div>
+  <aside class="drawer" id="menu" aria-label="Menu" aria-hidden="true">
+  <div class="dhead"><b>Menu</b><button id="menuClose" class="ghost round" aria-label="Fechar menu">✕</button></div>
+
+  <details class="panel" id="cfg">
+    <summary>Usuários</summary>
+    <div class="users" style="margin-top:10px">
+      <div>
+        <label for="u0">Usuário 1 (iNaturalist)</label>
+        <input type="text" id="u0" autocomplete="off" spellcheck="false">
+        <label for="n0" style="margin-top:8px">Nome exibido nos cards</label>
+        <input type="text" id="n0" autocomplete="off">
+        <div class="radio"><input type="radio" name="act" id="a0" value="0"><label for="a0" style="margin:0">Sou eu</label></div>
+      </div>
+      <div>
+        <label for="u1">Usuário 2 (iNaturalist)</label>
+        <input type="text" id="u1" autocomplete="off" spellcheck="false">
+        <label for="n1" style="margin-top:8px">Nome exibido nos cards</label>
+        <input type="text" id="n1" autocomplete="off">
+        <div class="radio"><input type="radio" name="act" id="a1" value="1"><label for="a1" style="margin:0">Sou eu</label></div>
+      </div>
+    </div>
+  </details>
+
+  <div class="panel">
+    <div class="row">
+      <div class="field">
+        <label for="placeQ">Região (país, estado ou município)</label>
+        <input type="text" id="placeQ" placeholder="Ex.: Curitiba, Minas Gerais, Brazil" autocomplete="off" title="Para países, use o nome em inglês (Brazil, Portugal...)">
+        <ul class="suggest" id="placeList" hidden></ul>
+        <div id="placeChip"></div>
+      </div>
+      <div class="field">
+        <label for="rank">Filtro taxonômico</label>
+        <div style="display:grid;grid-template-columns:170px 1fr;gap:8px">
+          <select id="rank">
+            <option value="">Todos os animais</option>
+            <option value="class">Classe</option>
+            <option value="family">Família</option>
+            <option value="genus">Gênero</option>
+          </select>
+          <input type="text" id="taxonQ" placeholder="Digite o nome" autocomplete="off" disabled>
+        </div>
+        <ul class="suggest" id="taxonList" hidden></ul>
+        <div id="taxonChip"></div>
+      </div>
+      <div>
+        <label for="month">Época do ano</label>
+        <select id="month"></select>
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button id="go">Buscar</button>
+      <button id="locate" class="ghost round" title="Minha cidade (usa a sua localização)" aria-label="Minha cidade">📍</button>
+      <button id="refresh" class="ghost round" title="Atualizar listas e fotos dos usuários" aria-label="Atualizar listas e fotos">🔄</button>
+    </div>
+  </div>
+
+  <div id="summary" class="panel" hidden></div>
+  </aside>
+
+  <div class="filterbar">
+    <div class="seg" id="seg" hidden></div>
+    <div class="rarslot" id="rarSlot"><div class="rarwrap" id="rarFloat"><span>Raridade</span><div class="rarbtns" id="rarBtns" title="Pode marcar várias"></div></div></div>
+  </div>
+  <div id="status" aria-live="polite"></div>
+  <div class="grid" id="grid"></div>
+  <div class="more"><button id="more" hidden>Carregar mais</button></div>
+  <footer>Dados: API pública do iNaturalist · fotos apenas das observações dos dois usuários · raridade relativa à lista exibida: <b style="color:#2f7d3b">C</b> comum (40% mais observadas entre as com 2+ observações) · <b style="color:#2b6cb0">I</b> incomum (demais com 2+ observações) · <b style="color:#c99a06">R</b> raro (1 observação) · <b style="color:#c53030">L</b> lendário (1 observação + selo de ameaça VU, EN, CR, EW ou EX).<br>Selo ⚠ = status de conservação exibido pelo iNaturalist, de qualquer fonte exceto CITES e NatureServe; Raro com selo NT e Lendário, quando há foto nossa, ganham o efeito foil.<br>Ao lado do nome: ✓✓ = tem observação nesta região · ✓ = tem só em outro lugar · ✗ = nunca registrou.</footer>
+</div>
+
+<script>
+const HOST = "https://api.inaturalist.org";
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const fmt = (n) => Number(n).toLocaleString("pt-BR");
+const PAGE = 48;
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+const LEVEL = { 0: "País", 10: "Estado", 20: "Município" };
+const ALIAS = { brasil: "brazil", "estados unidos": "united states", "reino unido": "united kingdom",
+  alemanha: "germany", frança: "france", franca: "france", espanha: "spain", itália: "italy",
+  italia: "italy", japão: "japan", japao: "japan", méxico: "mexico", suíça: "switzerland", suica: "switzerland" };
+// Ícone da silhueta pelo grupo do animal. Percorre os ancestrais da espécie do mais específico para o mais geral,
+// então uma coruja (Strigiformes) ganha 🦉 e uma ave sem grupo próprio cai em Aves (🐦).
+const TAXON_EMOJI = new Map([
+  [40151, "🐕"], [41944, "🐈"], [42043, "🐕"], [526556, "🦦"], [41660, "🦝"], [41636, "🐻"], [42118, "🐗"], [42158, "🦌"], [43328, "🐎"], [42540, "🐀"],
+  [43367, "🐒"], [40268, "🦇"], [43698, "🐁"], [152871, "🐬"], [152870, "🦌"], [41573, "🐺"], [43094, "🐇"], [53537, "🦥"],
+  [3, "🐦"], [19350, "🦉"], [18874, "🦜"], [6888, "🦆"], [2708, "🕊️"], [71261, "🦅"], [67570, "🦅"], [573, "🐔"], [67564, "🐧"], [67569, "🦩"],
+  [26036, "🦎"], [39532, "🐢"], [85553, "🐍"], [26039, "🐊"],
+  [20978, "🐸"], [47178, "🐟"], [196614, "🦈"],
+  [47115, "🐚"], [47114, "🐌"], [47584, "🐚"], [47459, "🐙"],
+  [47119, "🕷️"], [48894, "🦂"],
+  [47158, "🐛"], [47157, "🦋"], [47208, "🐞"], [47201, "🐝"], [47336, "🐜"], [47822, "🦟"], [47651, "🦗"],
+  [47187, "🦀"], [47549, "⭐"], [47534, "🪼"], [47491, "🪱"],
+]);
+const EMOJI = { Aves: "🐦", Mammalia: "🐕", Reptilia: "🦎", Amphibia: "🐸", Actinopterygii: "🐟",
+  Insecta: "🐛", Arachnida: "🕷️", Mollusca: "🐚" };
+function emojiFor(t) {
+  const chain = [...(t.ancestor_ids || []), t.id];
+  for (let i = chain.length - 1; i >= 0; i--) if (TAXON_EMOJI.has(chain[i])) return TAXON_EMOJI.get(chain[i]);
+  return EMOJI[t.iconic_taxon_name] || "❔";
+}
+const MONTHS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+const VIEWS = [["all", "Todas"], ["missing", "Faltam para mim"], ["mine", "Já tenho"], ["other", null], ["none", "Nenhum de nós tem"]];
+
+const savedUsers = store.get("users", null);
+const state = {
+  users: savedUsers && (savedUsers[0] || savedUsers[1]) ? savedUsers : ["ge_op", "luciano_silveira"],
+  names: store.get("names", ["Geovane", "Luciano"]),   // nome exibido de cada usuário (mesma ordem de users)
+  active: store.get("active", 0),
+  place: store.get("place", null),
+  taxon: null, month: "", view: "all", shown: PAGE,
+  rar: new Set(),      // letras de raridade marcadas no filtro (vazio = todas)
+  token: 0, page: 1, exhausted: true, loading: false,
+  items: [], total: 0,
+  mySet: new Set(), otherSet: new Set(), me: "", other: "",
+  regMine: new Set(), regOther: new Set(),   // espécies de cada um NA região selecionada
+  threat: new Map(),   // id da espécie -> {count, iucn, status}: espécies com status IUCN (NT ou pior) na região
+  firstIdx: {},        // contagem de observações -> posição da 1ª espécie com essa contagem (para empates)
+  groupSize: {},       // contagem de observações -> quantas espécies têm essa contagem (entre as já carregadas)
+  ns: null,            // quantas espécies da lista têm 2 ou mais observações
+  photos: {},               // username(lower) -> Map(taxonId -> "123/square.jpg")
+  seasonOpen: new Set(), seasonCache: {},
+  namesOpen: new Set(), namesCache: {},
+};
+
+// Nome exibido (primeiro nome) a partir do login do iNaturalist; os links continuam usando o login.
+function dn(login) {
+  const i = state.users.findIndex((u) => u.toLowerCase() === String(login).toLowerCase());
+  return (i >= 0 && state.names[i]) || login;
+}
+
+/* ---------- API ---------- */
+async function api(path, params = {}) {
+  const url = new URL(HOST + path);
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, v);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const r = await fetch(url);
+    if (r.status === 429 || r.status >= 500) { await sleep(1500 * (attempt + 1)); continue; }
+    if (!r.ok) throw new Error("Erro " + r.status + " da API do iNaturalist.");
+    return r.json();
+  }
+  throw new Error("A API do iNaturalist está limitando as requisições. Tente de novo em instantes.");
+}
+
+// Ids de táxons (inclui ancestrais, para cobrir subespécies) de todas as páginas de species_counts.
+async function fetchSpeciesSet(params) {
+  const ids = [];
+  let page = 1, total = Infinity;
+  while ((page - 1) * 500 < total) {
+    const d = await api("/v1/observations/species_counts", { ...params, per_page: 500, page });
+    total = d.total_results;
+    for (const r of d.results) { ids.push(r.taxon.id); if (r.taxon.ancestor_ids) ids.push(...r.taxon.ancestor_ids); }
+    if (!d.results.length) break;
+    page++;
+    await sleep(250);
+  }
+  return [...new Set(ids)];
+}
+
+// Espécies Research Grade do usuário no mundo todo.
+async function getLifeList(username, force) {
+  const key = "life:" + username.toLowerCase();
+  const cached = store.get(key, null);
+  if (!force && cached && Date.now() - cached.t < 3600e3) return new Set(cached.ids);
+  const uniq = await fetchSpeciesSet({ user_id: username, quality_grade: "research", taxon_id: 1 });
+  store.set(key, { t: Date.now(), ids: uniq });
+  return new Set(uniq);
+}
+
+// Uma foto (a mais recente) por espécie, das observações Research Grade do usuário. Usa a API v2 (resposta enxuta).
+// Com placeId, só observações feitas naquele lugar (a foto da carta prefere as da região selecionada).
+async function getPhotos(username, force, placeId) {
+  const key = username.toLowerCase() + (placeId ? ":" + placeId : "");
+  if (!force && state.photos[key]) return state.photos[key];
+  const ck = "photos2:" + key;
+  const cached = store.get(ck, null);
+  if (!force && cached && Date.now() - cached.t < 24 * 3600e3) {
+    return (state.photos[key] = new Map(Object.entries(cached.m).map(([k, v]) => [Number(k), v])));
+  }
+  const map = new Map();
+  let below = null;
+  for (;;) {
+    const d = await api("/v2/observations", {
+      user_id: username, place_id: placeId, quality_grade: "research", taxon_id: 1, photos: "true", per_page: 200,
+      order_by: "id", order: "desc", id_below: below,
+      fields: "id,taxon.id,taxon.rank,taxon.ancestor_ids,photos.url",
+    });
+    for (const o of d.results) {
+      const url = o.photos && o.photos[0] && o.photos[0].url;
+      if (!url || !o.taxon) continue;
+      // Guarda a URL completa: fotos CC ficam no bucket S3 (inaturalist-open-data) e as demais em static.inaturalist.org.
+      const path = url;
+      let id = o.taxon.id;
+      if (["subspecies", "variety", "form", "hybrid"].includes(o.taxon.rank) && o.taxon.ancestor_ids && o.taxon.ancestor_ids.length > 1) {
+        id = o.taxon.ancestor_ids[o.taxon.ancestor_ids.length - 2];
+      }
+      if (!map.has(id)) map.set(id, path);
+    }
+    if (d.results.length < 200) break;
+    below = d.results[d.results.length - 1].id;
+    await sleep(500);
+  }
+  store.set(ck, { t: Date.now(), m: Object.fromEntries(map) });
+  return (state.photos[key] = map);
+}
+
+/* ---------- UI helpers ---------- */
+function setStatus(msg, isError) { const s = $("status"); s.textContent = msg || ""; s.className = isError ? "error" : ""; }
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+
+function renderChip(box, text, onClear) {
+  box.replaceChildren();
+  if (!text) return;
+  const c = el("span", "chip", text);
+  const x = el("button", "", "×"); x.title = "Limpar"; x.onclick = onClear;
+  c.append(x); box.append(c);
+}
+
+function fillSuggest(ul, items, onPick) {
+  ul.replaceChildren();
+  if (!items.length) { ul.hidden = true; return; }
+  for (const it of items) {
+    const li = el("li"); li.append(el("span", "", it.label), el("small", "", it.hint || ""));
+    li.onclick = () => { ul.hidden = true; onPick(it); };
+    ul.append(li);
+  }
+  ul.hidden = false;
+}
+
+/* ---------- Região ---------- */
+async function searchPlaces(q) {
+  q = q.trim();
+  if (q.length < 2) { $("placeList").hidden = true; return; }
+  const queries = [q]; const alias = ALIAS[q.toLowerCase()]; if (alias) queries.push(alias);
+  try {
+    const seen = new Map();
+    for (const term of queries) {
+      const d = await api("/v1/places/autocomplete", { q: term, per_page: 20 });
+      for (const r of d.results) if (r.admin_level in LEVEL && !seen.has(r.id)) seen.set(r.id, r);
+    }
+    fillSuggest($("placeList"), [...seen.values()].slice(0, 10).map((r) =>
+      ({ id: r.id, label: r.display_name, hint: LEVEL[r.admin_level] })), pickPlace);
+  } catch (e) { setStatus(e.message, true); }
+}
+function pickPlace(it) {
+  state.place = { id: it.id, name: it.label, level: it.hint };
+  store.set("place", state.place);
+  $("placeQ").value = "";
+  showPlaceChip();
+  closeMenu();
+  run(false);
+}
+
+/* ---------- Menu (gaveta) ---------- */
+function openMenu() {
+  $("menu").classList.add("open"); $("scrim").classList.add("open");
+  $("menu").setAttribute("aria-hidden", "false"); $("menuBtn").setAttribute("aria-expanded", "true");
+}
+function closeMenu() {
+  $("menu").classList.remove("open"); $("scrim").classList.remove("open");
+  $("menu").setAttribute("aria-hidden", "true"); $("menuBtn").setAttribute("aria-expanded", "false");
+}
+
+function showPlaceChip() {
+  const p = state.place;
+  $("where").textContent = p ? "📍 " + p.name : "";   // a região atual fica visível na barra de cima
+  renderChip($("placeChip"), p ? p.name + " · " + p.level : "", () => { state.place = null; store.set("place", null); showPlaceChip(); });
+}
+
+/* ---------- Cidade atual ---------- */
+// Descobre o município pelas coordenadas, usando só a API do iNaturalist (places/nearby numa caixa de ~200 m).
+async function locateCity() {
+  if (!navigator.geolocation) throw new Error("o navegador não oferece geolocalização.");
+  const pos = await new Promise((ok, fail) => navigator.geolocation.getCurrentPosition(ok, fail, { timeout: 10000, maximumAge: 600000 }));
+  const la = pos.coords.latitude, lo = pos.coords.longitude, e = 0.001;
+  const d = await api("/v1/places/nearby", { nelat: la + e, nelng: lo + e, swlat: la - e, swlng: lo - e, per_page: 50 });
+  const std = (d.results && d.results.standard) || [];
+  const p = std.find((x) => x.admin_level === 20) || std.find((x) => x.admin_level === 10) || std.find((x) => x.admin_level === 0);
+  if (!p) throw new Error("não encontrei um município para esta posição.");
+  return { id: p.id, name: p.display_name, level: LEVEL[p.admin_level] };
+}
+
+async function useCurrentCity(silent) {
+  try {
+    setStatus("Descobrindo a sua cidade…");
+    state.place = await locateCity();
+    store.set("place", state.place); showPlaceChip();
+    run(false);
+  } catch (e) {
+    if (silent && state.place) run(false);   // sem localização: usa a última região escolhida
+    else {
+      setStatus(silent ? "Escolha uma região no menu ☰ (não consegui obter a sua localização)." : "Não foi possível obter a sua localização: " + e.message, !silent);
+      if (silent) openMenu();
+    }
+  }
+}
+
+/* ---------- Filtro taxonômico ---------- */
+async function searchTaxa(q) {
+  q = q.trim(); const rank = $("rank").value;
+  if (q.length < 2 || !rank) { $("taxonList").hidden = true; return; }
+  try {
+    const d = await api("/v1/taxa/autocomplete", { q, rank, taxon_id: 1, locale: "pt-BR", per_page: 15 });
+    fillSuggest($("taxonList"), d.results.filter((t) => t.rank === rank).map((t) =>
+      ({ id: t.id, rank: t.rank, label: t.preferred_common_name ? t.preferred_common_name + " (" + t.name + ")" : t.name })),
+      pickTaxon);
+  } catch (e) { setStatus(e.message, true); }
+}
+function pickTaxon(it) {
+  state.taxon = { id: it.id, name: it.label, rank: it.rank };
+  $("taxonQ").value = "";
+  showTaxonChip();
+  if (state.place) run(false);
+}
+function showTaxonChip() {
+  renderChip($("taxonChip"), state.taxon ? state.taxon.name : "", () => { state.taxon = null; showTaxonChip(); if (state.place) run(false); });
+}
+
+/* ---------- Busca principal ---------- */
+function categoryOf(it) {
+  const mine = state.mySet.has(it.taxon.id), other = state.otherSet.has(it.taxon.id);
+  return { mine, other };
+}
+function passesView(it) {
+  if (state.rar.size && !state.rar.has(rarity(it)[0])) return false;
+  const { mine, other } = categoryOf(it);
+  switch (state.view) {
+    case "missing": return !mine;
+    case "mine": return mine;
+    case "other": return !mine && other;
+    case "none": return !mine && !other;
+    default: return true;
+  }
+}
+
+function renderSeg() {
+  const seg = $("seg"); seg.replaceChildren();
+  for (const [key, label] of VIEWS) {
+    if (key === "other" && !state.other) continue;
+    const b = el("button", state.view === key ? "on" : "", key === "other" ? "Só " + dn(state.other) + " tem" : label);
+    b.onclick = () => { state.view = key; state.shown = PAGE; renderSeg(); render(); ensureShown(state.token); };
+    seg.append(b);
+  }
+  seg.hidden = false;
+}
+
+async function run(force) {
+  const token = ++state.token;
+  state.items = []; state.page = 1; state.exhausted = false; state.loading = false; state.shown = PAGE;
+  state.regMine = new Set(); state.regOther = new Set(); state.threat = new Map(); state.firstIdx = {}; state.groupSize = {}; state.ns = null;
+  $("grid").replaceChildren(); $("more").hidden = true; $("summary").hidden = true; $("seg").hidden = true;
+  const me = state.users[state.active].trim(), other = state.users[1 - state.active].trim();
+  if (!me) { $("cfg").open = true; openMenu(); setStatus("Informe seu usuário do iNaturalist em \"Usuários\" (menu ☰).", true); return; }
+  if (!state.place) { openMenu(); setStatus("Escolha uma região no menu ☰.", true); return; }
+  try {
+    setStatus("Lendo as listas de espécies…");
+    state.me = me;
+    state.other = other && other.toLowerCase() !== me.toLowerCase() ? other : "";
+    state.mySet = await getLifeList(me, force);
+    state.otherSet = state.other ? await getLifeList(state.other, force) : new Set();
+    if (token !== state.token) return;
+    renderSeg();
+    loadSummary(token);                       // em paralelo
+    loadRegionSets(token);                    // em paralelo; liga o ✓ de "tenho nesta região"
+    loadPhotosInBackground(token, force);     // em paralelo; atualiza as cartas quando chegar
+    const [threat, ns] = await Promise.all([loadThreatened(), countNonSingletons()]);
+    if (token !== state.token) return;
+    state.threat = threat; state.ns = ns;
+    await ensureShown(token);
+  } catch (e) { if (token === state.token) setStatus(e.message, true); }
+}
+
+// Quantas espécies da lista têm 2 ou mais observações. A lista vem ordenada da mais para a menos observada, então
+// uma busca binária (1 espécie por página) acha onde começam as de 1 observação sem carregar a lista inteira.
+async function countNonSingletons() {
+  const base = { place_id: state.place.id, taxon_id: state.taxon ? state.taxon.id : 1, month: state.month, quality_grade: "research" };
+  try {
+    const total = (await api("/v1/observations/species_counts", { ...base, per_page: 0 })).total_results;
+    if (!total) return 0;
+    const countAt = async (k) => { const d = await api("/v1/observations/species_counts", { ...base, per_page: 1, page: k }); return d.results[0] ? d.results[0].count : 0; };
+    if ((await countAt(total)) >= 2) return total;
+    let lo = 1, hi = total;   // menor posição k com contagem ≤ 1
+    while (lo < hi) { const m = (lo + hi) >> 1; if ((await countAt(m)) <= 1) hi = m; else lo = m + 1; }
+    return lo - 1;
+  } catch (e) { return null; }
+}
+
+// Espécies da região com status de conservação da IUCN (NT ou pior). Sem filtro de mês: a contagem é a da região toda.
+async function loadThreatened() {
+  const map = new Map();
+  try {
+    for (let page = 1; page <= 4; page++) {
+      const d = await api("/v1/observations/species_counts", {
+        place_id: state.place.id, taxon_id: state.taxon ? state.taxon.id : 1, quality_grade: "research",
+        threatened: "true", locale: "pt-BR", per_page: 500, page,
+      });
+      for (const r of d.results) {
+        const cs = r.taxon.conservation_status;
+        // Selo do iNaturalist (NT, VU, EN, CR, EW ou EX) de qualquer fonte (IUCN, listas oficiais do Brasil, etc.), exceto:
+        //  - CITES: o Apêndice II/I só controla comércio, mas o iNaturalist o exibe como EN/VU (ex.: arara-vermelha-de-asa-verde);
+        //  - NatureServe: códigos G1 a G5 de conservação nos EUA/Canadá, não são ameaça (G4 = "aparentemente seguro" vira NT).
+        const auth = ((cs && cs.authority) || "").toLowerCase();
+        if (r.taxon.rank === "species" && cs && cs.iucn >= 20 && !auth.includes("cites") && !auth.includes("natureserve")) {
+          map.set(r.taxon.id, { count: r.count, iucn: cs.iucn, status: BADGE[cs.iucn] || "nt", source: cs.authority || "sem autoridade informada" });
+        }
+      }
+      if (page * 500 >= d.total_results || !d.results.length) break;
+      await sleep(250);
+    }
+    // O filtro "threatened" deixa de fora observações com localização oculta, então a contagem dele sai menor que a real
+    // (ex.: 1 em vez de 14). Para o Lendário, confirma a contagem real dos candidatos (VU ou pior, com ≤ 1 observação).
+    const cand = [...map].filter(([, v]) => v.iucn >= 30 && v.count <= 1).map(([id]) => id);
+    for (let i = 0; i < cand.length; i += 50) {
+      const d = await api("/v1/observations/species_counts", {
+        place_id: state.place.id, taxon_id: cand.slice(i, i + 50).join(","), quality_grade: "research", per_page: 500,
+      });
+      for (const r of d.results) if (map.has(r.taxon.id)) map.get(r.taxon.id).count = r.count;
+      await sleep(250);
+    }
+  } catch (e) { /* sem isso, ninguém é Lendário */ }
+  return map;
+}
+
+async function loadRegionSets(token) {
+  try {
+    const base = { place_id: state.place.id, taxon_id: state.taxon ? state.taxon.id : 1, quality_grade: "research" };
+    const mine = await fetchSpeciesSet({ ...base, user_id: state.me });
+    if (token !== state.token) return;
+    state.regMine = new Set(mine); render();
+    if (state.other) {
+      const other = await fetchSpeciesSet({ ...base, user_id: state.other });
+      if (token !== state.token) return;
+      state.regOther = new Set(other); render();
+    }
+  } catch (e) { /* sem isso, só o ✓ da região não aparece */ }
+}
+
+async function loadPhotosInBackground(token, force) {
+  try {
+    const users = [state.me, state.other].filter(Boolean), pid = state.place.id;
+    // 1º as fotos tiradas na região selecionada (são as que aparecem), depois as de qualquer lugar (para quem não tem foto na região)
+    for (const placeId of [pid, null]) {
+      for (const u of users) {
+        await getPhotos(u, force, placeId);
+        if (token !== state.token) return;
+        render();
+      }
+    }
+  } catch (e) { /* fotos são opcionais; as cartas continuam com silhueta */ }
+}
+
+async function loadSummary(token) {
+  try {
+    const base = { place_id: state.place.id, taxon_id: state.taxon ? state.taxon.id : 1, quality_grade: "research", per_page: 0 };
+    const calls = [api("/v1/observations/species_counts", base), api("/v1/observations/species_counts", { ...base, user_id: state.me })];
+    if (state.other) calls.push(api("/v1/observations/species_counts", { ...base, user_id: state.other }));
+    const [all, mine, other] = await Promise.all(calls);
+    if (token !== state.token) return;
+    const box = $("summary"); box.replaceChildren();
+    const title = el("div", "", state.place.name + (state.taxon ? " · " + state.taxon.name : "") + " — " + fmt(all.total_results) + " espécies registradas");
+    title.style.fontWeight = "600"; title.style.marginBottom = "8px";
+    box.append(title);
+    const stat = (name, have, cls) => {
+      const pct = all.total_results ? Math.round((have / all.total_results) * 100) : 0;
+      const d = el("div", "stat");
+      const t = el("div"); const b = el("b", cls, name); t.append(b, document.createTextNode(": " + fmt(have) + " de " + fmt(all.total_results) + " (" + pct + "%)"));
+      const p = el("div", "progress"); const i = el("div", cls); i.style.width = pct + "%"; p.append(i);
+      d.append(t, p); return d;
+    };
+    box.append(stat(dn(state.me), mine.total_results, "m"));
+    if (other) box.append(stat(dn(state.other), other.total_results, "o"));
+    const small = el("div", "sub", "Conta o que cada um registrou nesta região (independe do filtro de época).");
+    small.style.margin = "8px 0 0"; box.append(small);
+    box.hidden = false;
+  } catch (e) { /* resumo é opcional */ }
+}
+
+// Busca `n` páginas seguidas em paralelo (regiões grandes têm dezenas de páginas) e processa em ordem.
+async function fetchPages(token, n) {
+  const nums = Array.from({ length: n }, (_, k) => state.page + k);
+  const ds = await Promise.all(nums.map((p) => api("/v1/observations/species_counts", {
+    place_id: state.place.id, taxon_id: state.taxon ? state.taxon.id : 1, month: state.month,
+    quality_grade: "research", locale: "pt-BR", per_page: 500, page: p,
+  })));
+  if (token !== state.token) return;
+  for (let k = 0; k < ds.length && !state.exhausted; k++) {
+    const d = ds[k], pg = nums[k];
+    state.total = d.total_results;
+    d.results.forEach((r, i) => {
+      if (r.taxon.rank !== "species") return;
+      // pct = fração de espécies com MAIS observações que esta (empates ficam na mesma faixa)
+      const g = (pg - 1) * 500 + i;
+      if (!(r.count in state.firstIdx)) state.firstIdx[r.count] = g;
+      state.groupSize[r.count] = (state.groupSize[r.count] || 0) + 1;
+      state.items.push({ taxon: r.taxon, count: r.count, pct: state.firstIdx[r.count] / Math.max(d.total_results, 1) });
+    });
+    state.page = pg + 1;
+    if (!d.results.length || pg * 500 >= d.total_results || state.page > 80) state.exhausted = true;
+  }
+}
+
+async function ensureShown(token) {
+  if (state.loading) return;
+  state.loading = true;
+  let errMsg = null;
+  try {
+    while (state.items.filter(passesView).length < state.shown && !state.exhausted) {
+      setStatus("Carregando espécies… página " + state.page + (state.total ? " de " + Math.ceil(state.total / 500) : "") +
+        (state.rar.size || state.view !== "all" ? " (procurando as que combinam com o filtro)" : ""));
+      // sem filtro basta 1 página por vez; com filtro (ex.: Raro no Brasil) as espécies procuradas ficam longe, então 3 em paralelo
+      await fetchPages(token, state.rar.size || state.view !== "all" ? 3 : 1);
+      if (token !== state.token) return;
+      render();
+      await sleep(200);
+    }
+  } catch (e) { errMsg = e.message; }
+  finally { if (token === state.token) state.loading = false; }
+  if (token === state.token) { render(); if (errMsg) setStatus(errMsg + " (use \"Carregar mais\" para tentar de novo)", true); }   // render() não pode apagar o erro
+}
+
+/* ---------- Cartas ---------- */
+// Prioridade: foto tirada na região selecionada (do usuário, depois do outro); senão a mais recente de qualquer lugar.
+function photoFor(id) {
+  const users = [state.me, state.other].filter(Boolean);
+  const sources = [];
+  for (const u of users) sources.push([u, state.photos[u.toLowerCase() + ":" + state.place.id], true]);
+  for (const u of users) sources.push([u, state.photos[u.toLowerCase()], false]);
+  for (const [u, p, here] of sources) {
+    if (p && p.has(id)) return { url: p.get(id).replace("/square.", "/medium."), who: dn(u), here };
+  }
+  return null;
+}
+const CONS = { nt: "Quase ameaçada", vu: "Vulnerável", en: "Em perigo", cr: "Criticamente em perigo", ew: "Extinta na natureza", ex: "Extinta" };
+const BADGE = { 20: "nt", 30: "vu", 40: "en", 50: "cr", 60: "ew", 70: "ex" };   // nível do selo -> sigla exibida
+
+// Lendário: UMA única observação na região + selo de ameaça VU, EN, CR, EW ou EX (de qualquer fonte, menos CITES e NatureServe).
+// Raro com selo NT recebe o foil (ver card()).
+// Raro: apenas 1 observação. Entre as que têm 2 ou mais (state.ns), Comum = 40% mais observadas e Incomum = o resto.
+// Empates ficam na mesma faixa, pelo ponto médio do grupo de espécies com a mesma contagem.
+// (Dividir a lista inteira por porcentagem falhava em regiões pequenas: 50% a 75% das espécies têm 1 observação,
+// então um dos grupos Comum/Incomum ficava vazio.)
+function rarity(it) {
+  const th = state.threat.get(it.taxon.id);
+  if (th && th.iucn >= 30 && th.count <= 1) return ["L", "r-legend", "Lendário", "1 observação na região e " + (CONS[th.status] || "ameaçada").toLowerCase() + " (" + th.source + ")"];
+  if (it.count <= 1) return ["R", "r-rare", "Raro", "apenas 1 observação na região"];
+  const mid = state.ns
+    ? (state.firstIdx[it.count] + (state.groupSize[it.count] || 1) / 2) / state.ns
+    : it.pct * 2;   // sem a contagem de espécies com 2+ observações: aproximação pela lista inteira
+  return mid < 0.40 ? ["C", "r-common", "Comum", "entre as 40% mais observadas dentre as de 2 ou mais observações"]
+                    : ["I", "r-uncommon", "Incomum", "2 ou mais observações, fora das 40% mais observadas"];
+}
+
+function render() {
+  const list = state.items.filter(passesView);
+  const grid = $("grid"); grid.replaceChildren();
+  for (const it of list.slice(0, state.shown)) grid.append(card(it));
+  const more = list.length > state.shown || !state.exhausted;
+  $("more").hidden = !more || state.loading;
+  if (!state.loading) {
+    setStatus(list.length
+      ? "Mostrando " + fmt(Math.min(state.shown, list.length)) + " de " + fmt(list.length) + (state.exhausted ? "" : "+") + " espécies" + (state.month ? " em " + MONTHS[state.month - 1] : "") + "."
+      : (state.exhausted ? "Nada neste filtro. 🎉" : "Procurando…"));
+  }
+}
+
+function card(it) {
+  const t = it.taxon, { mine, other } = categoryOf(it);
+  // have = tenho observação NESTA região; elsewhere = tenho só em outro lugar; miss = nunca registrei
+  const inRegion = state.regMine.has(t.id);
+  const [rl, rc, rn, rt] = rarity(it);
+  const c = el("div", "card " + (inRegion ? "have" : mine ? "elsewhere" : "miss"));
+  c.dataset.r = rl;   // a moldura da carta segue a raridade
+  const cin = el("div", "cin");
+  const head = el("div", "chead");
+  const name = el("a", "name", t.preferred_common_name || t.name);
+  name.href = "https://www.inaturalist.org/taxa/" + t.id; name.target = "_blank"; name.rel = "noopener";
+  const hp = el("span", "hp"); hp.append(el("small", "", "OBS "), document.createTextNode(fmt(it.count)));
+  hp.title = fmt(it.count) + " observações Research Grade nesta região";
+  head.append(name, hp);
+  const art = el("div", "art");
+  const ph = photoFor(t.id);
+  if (ph) {
+    const img = el("img"); img.src = ph.url; img.loading = "lazy"; img.alt = t.preferred_common_name || t.name;
+    const who = el("span", "who", "foto: " + ph.who + (ph.here ? "" : " · outro local"));
+    who.title = ph.here ? "Foto tirada na região selecionada" : "Foto tirada em outro lugar (não há foto desta espécie na região)";
+    art.append(img, who);
+    // Foil: Lendária, ou Rara com status de conservação da IUCN (⚠, que só pode ser NT aqui: VU, EN e CR com 1 observação viram L)
+    if (rl === "L" || (rl === "R" && state.threat.has(t.id))) c.classList.add("foil");
+  } else {
+    art.append(el("span", "emoji", emojiFor(t)));
+  }
+  const rr = el("span", "rar " + rc, rl);
+  rr.title = rn + " — " + rt;
+  const th = state.threat.get(t.id);
+  let cc = null;   // status de conservação (só quando houver)
+  if (th) {
+    cc = el("span", "cons" + (th.iucn >= 30 ? " hot" : ""), "⚠ " + th.status.toUpperCase());
+    cc.title = (CONS[th.status] || "Status de conservação") + " — fonte: " + th.source;
+  }
+  // faixa sob a foto: [status de conservação, quando houver] nome científico (a raridade aparece só na cor da moldura)
+  const banner = el("div", "banner");
+  if (cc) banner.append(cc);
+  banner.append(el("span", "sci", t.name));
+  const info = el("div", "info");
+  const pills = el("div", "pills");
+  // Cada treinador é uma "linha de ataque": ✓✓ = tem observação nesta região; ✓ = tem só em outro lugar; ✗ = nunca registrou.
+  // Clicar no nome abre as observações dele dessa espécie no iNaturalist.
+  const pill = (user, has, cls, inReg) => {
+    const a = el(has ? "a" : "span", "pill " + cls + (has ? " on" : ""));
+    const mark = el("span", "pm", has ? (inReg ? "✓✓" : "✓") : "✗");
+    mark.title = has ? (inReg ? "Tem observação nesta região" : "Tem observação, mas em outro lugar") : "Nunca registrou";
+    a.append(el("i", "dot"), el("span", "pn", dn(user)), mark);
+    if (has) {
+      // ✓✓ (tem na região): filtra pela região selecionada. ✓ (só em outro lugar): sem filtro de lugar, senão a página viria vazia.
+      a.href = "https://www.inaturalist.org/observations?user_id=" + encodeURIComponent(user) + "&taxon_id=" + t.id + "&quality_grade=research" +
+        (inReg ? "&place_id=" + state.place.id : "");
+      a.target = "_blank"; a.rel = "noopener";
+      a.title = "Ver observações de " + dn(user) + (inReg ? " em " + state.place.name : " (em outro lugar)") + " no iNaturalist";
+    }
+    return a;
+  };
+  pills.append(pill(state.me, mine, "m", inRegion));
+  if (state.other) pills.append(pill(state.other, other, "o", state.regOther.has(t.id)));
+  info.append(pills);
+  const btns = el("div", "btns");
+  const btn = el("button", "season-btn", "📅");
+  btn.title = "Sazonalidade"; btn.setAttribute("aria-label", "Sazonalidade");
+  const nbtn = el("button", "season-btn", "🏷️");
+  nbtn.title = "Outros nomes populares"; nbtn.setAttribute("aria-label", "Outros nomes populares");
+  const box = el("div"), nbox = el("div");
+  btn.onclick = () => toggleSeason(t.id, box);
+  nbtn.onclick = () => toggleNames(t, nbox);
+  const obs = el("a", "season-btn", "🔎");
+  obs.setAttribute("aria-label", "Ver observações no iNaturalist");
+  obs.href = "https://www.inaturalist.org/observations?place_id=" + state.place.id + "&taxon_id=" + t.id + "&quality_grade=research";
+  obs.target = "_blank"; obs.rel = "noopener"; obs.title = "Ver observações desta espécie em " + state.place.name + " no iNaturalist";
+  btns.append(btn, nbtn, obs);
+  const foot = el("div", "foot");
+  foot.append(btns);   // rodapé: só os botões, no canto inferior direito
+  info.append(nbox, box, foot);
+  if (state.seasonOpen.has(t.id)) toggleSeason(t.id, box, true);
+  if (state.namesOpen.has(t.id)) toggleNames(t, nbox, true);
+  cin.append(head, art, banner, info);
+  c.append(cin);
+  return c;
+}
+
+// Outros nomes populares em português (o iNaturalist logado mostra o nome conforme as preferências da conta).
+async function toggleNames(taxon, box, keepOpen) {
+  const id = taxon.id;
+  if (!keepOpen && state.namesOpen.has(id)) { state.namesOpen.delete(id); box.replaceChildren(); return; }
+  state.namesOpen.add(id);
+  try {
+    if (!state.namesCache[id]) {
+      box.textContent = "Carregando…";
+      const d = await api("/v1/taxa/" + id, { all_names: "true", locale: "pt-BR" });
+      const names = (d.results[0].names || []).filter((n) => n.lexicon === "portuguese" && n.is_valid)
+        .sort((a, b) => (a.position || 0) - (b.position || 0)).map((n) => n.name);
+      state.namesCache[id] = [...new Set(names)];
+    }
+    const primary = (taxon.preferred_common_name || "").toLowerCase();
+    const others = state.namesCache[id].filter((n) => n.toLowerCase() !== primary);
+    box.replaceChildren(el("div", "names", others.length ? "Também: " + others.join(" · ") : "Sem outros nomes em português."));
+  } catch (e) { box.textContent = "Não foi possível carregar."; }
+}
+
+async function toggleSeason(taxonId, box, keepOpen) {
+  if (!keepOpen && state.seasonOpen.has(taxonId)) { state.seasonOpen.delete(taxonId); box.replaceChildren(); return; }
+  state.seasonOpen.add(taxonId);
+  const key = state.place.id + ":" + taxonId;
+  try {
+    if (!state.seasonCache[key]) {
+      box.textContent = "Carregando…";
+      const d = await api("/v1/observations/histogram", { place_id: state.place.id, taxon_id: taxonId,
+        quality_grade: "research", date_field: "observed", interval: "month_of_year" });
+      state.seasonCache[key] = d.results.month_of_year;
+    }
+    const h = state.seasonCache[key], max = Math.max(1, ...Object.values(h));
+    const sel = state.month ? Number(state.month) : new Date().getMonth() + 1;
+    const wrap = el("div", "season");
+    for (let m = 1; m <= 12; m++) {
+      const v = h[m] || 0;
+      const b = el("div", "b" + (m === sel ? " hl" : "")); b.title = MONTHS[m - 1] + ": " + v + " obs.";
+      const bar = el("i"); bar.style.height = Math.round((v / max) * 100) + "%";
+      b.append(bar, el("span", "", MONTHS[m - 1][0]));
+      wrap.append(b);
+    }
+    box.replaceChildren(wrap);
+  } catch (e) { box.textContent = "Não foi possível carregar."; }
+}
+
+/* ---------- Inicialização ---------- */
+function init() {
+  $("u0").value = state.users[0]; $("u1").value = state.users[1];
+  $("n0").value = state.names[0] || ""; $("n1").value = state.names[1] || "";
+  $("a" + state.active).checked = true;
+  const saveUsers = () => {
+    state.users = [$("u0").value.trim(), $("u1").value.trim()];
+    state.names = [$("n0").value.trim(), $("n1").value.trim()];
+    state.active = $("a1").checked ? 1 : 0;
+    store.set("users", state.users); store.set("names", state.names); store.set("active", state.active);
+  };
+  ["u0", "u1", "a0", "a1"].forEach((id) => $(id).addEventListener("change", saveUsers));
+  ["n0", "n1"].forEach((id) => $(id).addEventListener("change", () => { saveUsers(); if (state.place && state.me) run(false); }));
+
+  const cur = new Date().getMonth() + 1;
+  const m = $("month");
+  m.append(new Option("Todos os meses", ""));
+  MONTHS.forEach((n, i) => m.append(new Option(n + (i + 1 === cur ? " (atual)" : ""), String(i + 1))));
+  m.addEventListener("change", () => { state.month = m.value; if (state.place) run(false); });
+
+  for (const [letter, color, name] of [["C", "#2f7d3b", "Comum"], ["I", "#2b6cb0", "Incomum"], ["R", "#c99a06", "Raro"], ["L", "#c53030", "Lendário"]]) {
+    const b = el("button", "rbtn", letter);
+    b.type = "button"; b.style.setProperty("--c", color); b.title = name; b.setAttribute("aria-pressed", "false");
+    b.onclick = () => {
+      const on = !state.rar.has(letter);
+      on ? state.rar.add(letter) : state.rar.delete(letter);
+      b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on));
+      state.shown = PAGE; render(); ensureShown(state.token);
+    };
+    $("rarBtns").append(b);
+  }
+
+  $("placeQ").addEventListener("input", debounce((e) => searchPlaces(e.target.value), 300));
+  $("taxonQ").addEventListener("input", debounce((e) => searchTaxa(e.target.value), 300));
+  $("rank").addEventListener("change", () => {
+    $("taxonQ").disabled = !$("rank").value; $("taxonQ").value = ""; $("taxonList").hidden = true;
+    if (!$("rank").value && state.taxon) { state.taxon = null; showTaxonChip(); if (state.place) run(false); }
+    else if ($("rank").value) $("taxonQ").focus();
+  });
+  $("go").onclick = () => { saveUsers(); closeMenu(); run(false); };
+  $("refresh").onclick = () => { saveUsers(); closeMenu(); run(true); };
+  $("locate").onclick = () => { saveUsers(); closeMenu(); useCurrentCity(false); };
+  $("menuBtn").onclick = () => ($("menu").classList.contains("open") ? closeMenu() : openMenu());
+  $("menuClose").onclick = closeMenu;
+  $("scrim").onclick = closeMenu;
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+  $("more").onclick = () => { state.shown += PAGE; render(); ensureShown(state.token); };
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".field")) { $("placeList").hidden = true; $("taxonList").hidden = true; }
+  });
+  // Filtro de raridade flutuante: ao rolar, quando o lugar original sai do topo da tela, ele passa a ficar fixo no canto superior direito.
+  // O "slot" guarda o tamanho do filtro para a página não dar salto quando ele sai do fluxo.
+  const slot = $("rarSlot"), fl = $("rarFloat"), page = document.querySelector(".wrap");
+  let floating = false, ticking = false;
+  const updateFloat = () => {
+    ticking = false;
+    const should = slot.getBoundingClientRect().top < 8;
+    if (should && !floating) {
+      slot.style.minWidth = fl.offsetWidth + "px"; slot.style.minHeight = fl.offsetHeight + "px";
+      fl.classList.add("floating"); floating = true;
+    } else if (!should && floating) {
+      fl.classList.remove("floating"); fl.style.right = "";
+      slot.style.minWidth = slot.style.minHeight = ""; floating = false;
+    }
+    if (floating) fl.style.right = (document.documentElement.clientWidth - page.getBoundingClientRect().right + 16) + "px";
+  };
+  addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(updateFloat); } }, { passive: true });
+  addEventListener("resize", updateFloat);
+
+  showPlaceChip(); showTaxonChip();
+  useCurrentCity(true);   // ao abrir: cidade atual (ou a última região, se não houver localização)
+}
+init();
+</script>
+</body>
+</html>
