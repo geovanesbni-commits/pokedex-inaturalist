@@ -201,6 +201,29 @@
     .names { font-size: .72rem; }
     footer { font-size: .72rem; }
   }
+
+  /* ===== Estilo de carta "colorido" (opcional): menu ☰ > Estilo das cartas =====
+     Ativado pela classe estilo-colorido no <body>. O :where() mantém a especificidade das regras originais, então o foil continua valendo.
+     Do nome científico para cima: tom claro (--top). Dali para baixo: tom mais escuro (--bot). Moldura: o tom mais escuro (--edge). */
+  :where(body.estilo-colorido) .card { --top: #dfe2dc; --bot: #aab2a7; --edge: #7e877b; --fa: var(--top); --fb: var(--bot); background: var(--edge); }
+  :where(body.estilo-colorido) .card[data-r="C"] { --top: #cdebd2; --bot: #7ab985; --edge: #4a9358; --fa: var(--top); --fb: var(--bot); }
+  :where(body.estilo-colorido) .card[data-r="I"] { --top: #cfe3f6; --bot: #79aadb; --edge: #4a82bd; --fa: var(--top); --fb: var(--bot); }
+  :where(body.estilo-colorido) .card[data-r="R"] { --top: #f8e6a8; --bot: #deb94a; --edge: #b48f18; --fa: var(--top); --fb: var(--bot); }
+  :where(body.estilo-colorido) .card[data-r="L"] { --top: #f9d0d0; --bot: #de8383; --edge: #b94848; --fa: var(--top); --fb: var(--bot); }
+  :where(body.estilo-colorido) .card.miss { --top: #dfe2dc; --bot: #aab2a7; --edge: #7e877b; --fa: var(--top); --fb: var(--bot); }
+  :where(body.estilo-colorido) .cin { background: var(--top); }
+  :where(body.estilo-colorido) .hp { color: var(--edge); }
+  :where(body.estilo-colorido) .banner { color: color-mix(in srgb, var(--edge) 75%, #000); }
+  :where(body.estilo-colorido) .art { border-color: var(--edge); }
+  :where(body.estilo-colorido) .info { margin: 8px -9px -9px; padding: 2px 9px 9px; background: var(--bot); border-radius: 0 0 10px 10px;
+          --ink: color-mix(in srgb, var(--edge) 40%, #000); --muted: color-mix(in srgb, var(--ink) 78%, transparent);
+          --accent: var(--ink); --other: var(--ink); color: var(--ink); }
+  :where(body.estilo-colorido) .info .pill .dot { background: var(--ink); opacity: .45; }
+  :where(body.estilo-colorido) .info .pill.m.on .dot { background: var(--ink); opacity: 1; }
+  :where(body.estilo-colorido) .info .pill.o .dot { background: transparent; border: 2px solid var(--ink); opacity: .45; }
+  :where(body.estilo-colorido) .info .pill.o.on .dot { opacity: 1; }
+  :where(body.estilo-colorido) .info .season-btn { background: rgba(255,255,255,.35); }
+  @media (max-width: 600px) { :where(body.estilo-colorido) .info { margin: 6px -6px -7px; padding: 2px 6px 7px; } }
 </style>
 </head>
 <body>
@@ -235,6 +258,14 @@
       </div>
     </div>
   </details>
+
+  <div class="panel" id="look">
+    <label style="margin-bottom:8px">Estilo das cartas</label>
+    <div class="seg" id="styleSeg" style="margin-bottom:0">
+      <button type="button" data-style="classico" title="Papel creme com moldura colorida pela raridade">Clássico</button>
+      <button type="button" data-style="colorido" title="A carta toda na cor da raridade: topo claro, base e moldura mais escuras">Colorido</button>
+    </div>
+  </div>
 
   <div class="panel">
     <div class="row">
@@ -978,6 +1009,15 @@ function init() {
   };
   addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(updateFloat); } }, { passive: true });
   addEventListener("resize", updateFloat);
+
+  // Estilo das cartas (opcional, guardado neste aparelho): clássico ou colorido
+  const applyCardStyle = (s) => {
+    document.body.classList.toggle("estilo-colorido", s === "colorido");
+    store.set("cardStyle", s);
+    document.querySelectorAll("#styleSeg button").forEach((b) => { b.classList.toggle("on", b.dataset.style === s); b.setAttribute("aria-pressed", String(b.dataset.style === s)); });
+  };
+  document.querySelectorAll("#styleSeg button").forEach((b) => { b.onclick = () => applyCardStyle(b.dataset.style); });
+  applyCardStyle(store.get("cardStyle", "classico") === "colorido" ? "colorido" : "classico");
 
   showPlaceChip(); showTaxonChip();
   useCurrentCity(true);   // ao abrir: cidade atual (ou a última região, se não houver localização)
